@@ -21,10 +21,13 @@
             overflow-x: hidden;
         }
 
+        /* Replaced by Plotly Title */
         h1 {
             margin-top: 20px;
             color: #333;
             font-weight: 300;
+            display: none;
+            /* Hide external title */
         }
 
         #chart-container {
@@ -35,15 +38,29 @@
             position: relative;
         }
 
+        /* Circular Mask for Image */
+        #center-image-container {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            width: 15%;
+            height: 15%;
+            pointer-events: none;
+            z-index: 10;
+            display: none;
+        }
+
         .footer {
             margin-bottom: 20px;
             color: #888;
             font-size: 0.9em;
         }
 
-        /* Legend Styles */
+        /* Legend Styles - Replaced by Plotly Legend */
         .legend-container {
-            display: flex;
+            display: none;
+            /* Hide external legend */
             gap: 15px;
             margin-bottom: 10px;
             flex-wrap: wrap;
@@ -125,6 +142,13 @@
             align-items: center;
         }
 
+        .input-column {
+            display: flex;
+            flex-direction: column;
+            gap: 5px;
+            flex: 2;
+        }
+
         .input-row label {
             flex: 1;
             font-size: 0.9em;
@@ -132,10 +156,18 @@
         }
 
         .input-row input[type="text"] {
-            flex: 2;
             padding: 5px;
             border: 1px solid #ddd;
             border-radius: 4px;
+            width: 100%;
+            box-sizing: border-box;
+        }
+
+        /* Specific style for subfield input to look optional/smaller */
+        input.subfield-input {
+            font-size: 0.85em;
+            color: #666;
+            border-style: dashed;
         }
 
         select {
@@ -157,6 +189,10 @@
         .btn-danger {
             background: #ffcdd2;
             color: #c62828;
+            flex: 0;
+            height: fit-content;
+            align-self: flex-start;
+            margin-top: 5px;
         }
 
         .btn-add {
@@ -203,7 +239,18 @@
     <!-- Custom HTML Legend -->
     <div id="custom-legend" class="legend-container"></div>
 
+    <!-- Chart Container -->
     <div id="chart-container"></div>
+
+    <!-- Hidden SVG defs for circular clipping -->
+    <svg width="0" height="0" style="position:absolute">
+        <defs>
+            <clipPath id="circle-clip" clipPathUnits="objectBoundingBox">
+                <circle cx="0.5" cy="0.5" r="0.5" />
+            </clipPath>
+        </defs>
+    </svg>
+
     <div class="footer">Interactive Visualization with Plotly.js</div>
 
     <script>
@@ -236,27 +283,22 @@
 
         // --- Initial Data State ---
         let state = {
+            // Refactored to objects: { main: string, sub: string }
             categories: [
-                'Generative Modeling',
-                'LLM',
-                'Representation Learning',
-                'Multimodal AI',
-                'Reasoning',
-                'AI Agents',
-                'Efficient AI',
-                'AI Safety'
+                { main: 'Generative Models', sub: 'Visual Generation' },
+                { main: 'VLA', sub: 'Robotics' },
+                { main: 'LLMs', sub: 'Representation Learning' },
+                { main: 'VLMs', sub: 'Representation Alignment' },
+                { main: 'ML Theory', sub: 'Manifolds' }
             ],
             values: [
                 "Research Focus",
-                "Research Focus",
-                "Familiar with",
-                "Know Basis",
                 "Don't Know",
-                "Familiar with",
                 "Know Basis",
-                "Research Focus"
+                "Know Basis",
+                "Know Basis"
             ],
-            imageUrl: "https://avatars.githubusercontent.com/u/9919?s=200&v=4"
+            imageUrl: "assets/sakura.jpeg"
         };
 
         // --- UI Logic ---
@@ -266,17 +308,7 @@
         }
 
         function renderLegend() {
-            const container = document.getElementById('custom-legend');
-            container.innerHTML = '';
-            LEVEL_KEYS.forEach(key => {
-                const item = document.createElement('div');
-                item.className = 'legend-item';
-                item.innerHTML = `
-                    <span class="legend-color" style="background-color: ${LEVELS[key].color}"></span>
-                    <span>${key}</span>
-                `;
-                container.appendChild(item);
-            });
+            // Deprecated: Legend is now handled by Plotly for export support
         }
 
         function renderEditor() {
@@ -286,8 +318,12 @@
             state.categories.forEach((cat, index) => {
                 const row = document.createElement('div');
                 row.className = 'input-row';
+                // Two inputs: Main and Sub
                 row.innerHTML = `
-                    <input type="text" value="${cat}" onchange="updateCategoryName(${index}, this.value)">
+                    <div class="input-column">
+                        <input type="text" placeholder="Category" value="${cat.main}" onchange="updateCategoryMain(${index}, this.value)">
+                        <input type="text" class="subfield-input" placeholder="Subfield (optional)" value="${cat.sub}" onchange="updateCategorySub(${index}, this.value)">
+                    </div>
                     <button class="btn btn-danger" onclick="removeCategory(${index})">×</button>
                 `;
                 catList.appendChild(row);
@@ -301,13 +337,16 @@
                 const row = document.createElement('div');
                 row.className = 'input-row';
 
+                // Display label as "Main - Sub" or just "Main"
+                const label = cat.sub ? `${cat.main} - ${cat.sub}` : cat.main;
+
                 // Create Select Options
                 const options = LEVEL_KEYS.map(key =>
                     `<option value="${key}" ${state.values[index] === key ? 'selected' : ''}>${key}</option>`
                 ).join('');
 
                 row.innerHTML = `
-                    <label>${cat}</label>
+                    <label>${label}</label>
                     <select onchange="updateValue(${index}, this.value)">
                         ${options}
                     </select>
@@ -321,9 +360,15 @@
 
         // --- Data Updates ---
 
-        function updateCategoryName(index, newName) {
-            state.categories[index] = newName;
-            renderEditor(); // Update labels in dropdown section
+        function updateCategoryMain(index, newMain) {
+            state.categories[index].main = newMain;
+            renderEditor(); // Update dropdown labels
+            updateChart();
+        }
+
+        function updateCategorySub(index, newSub) {
+            state.categories[index].sub = newSub;
+            renderEditor(); // Update dropdown labels
             updateChart();
         }
 
@@ -339,7 +384,7 @@
         }
 
         function addCategory() {
-            state.categories.push("New Interest");
+            state.categories.push({ main: "New Interest", sub: "" });
             state.values.push("Don't Know"); // Default
             renderEditor();
             updateChart();
@@ -381,7 +426,19 @@
             const innerRadius = 20;
             const thetaValues = categories.map((_, i) => i * sectorSize);
 
-            const trace = {
+            // Create labels with subfield formatting
+            // Main in bold, subfield smaller and on new line
+            const labels = categories.map(cat => {
+                if (cat.sub) {
+                    return `<b>${cat.main}</b><br><span style="font-size:0.85em; color:#666;">${cat.sub}</span>`;
+                }
+                return `<b>${cat.main}</b>`;
+            });
+
+            // Plain text for hover (Plotly hover might not support all HTML)
+            const hoverLabels = categories.map(cat => cat.sub ? `${cat.main} - ${cat.sub}` : cat.main);
+
+            const mainTrace = {
                 type: 'barpolar',
                 r: numericValues,
                 theta: thetaValues,
@@ -389,27 +446,47 @@
                 base: innerRadius,
                 marker: {
                     color: barColors,
-                    opacity: 0.9, // Increased opacity for better visibility
+                    opacity: 0.9,
                     line: { color: 'white', width: 1 }
                 },
                 hoverinfo: 'text',
-                text: values.map((v, i) => `${categories[i]}<br>Level: ${v}`)
+                text: values.map((v, i) => `${hoverLabels[i]}<br>Level: ${v}`),
+                showlegend: false // Main data hidden from legend
             };
 
+            const traces = [mainTrace];
+
+            // Add Dummy Traces for Legend
+            LEVEL_KEYS.forEach(key => {
+                traces.push({
+                    type: 'barpolar',
+                    r: [null], // No data, just for legend
+                    theta: [null],
+                    name: key,
+                    marker: { color: LEVELS[key].color },
+                    showlegend: true,
+                    hoverinfo: 'none'
+                });
+            });
+
             const layout = {
-                title: { text: '', font: { size: 24 } },
+                title: {
+                    text: 'My Research Focus',
+                    font: { size: 30, color: '#333', family: 'Segoe UI Light, sans-serif' },
+                    y: 0.95
+                },
                 polar: {
                     bgcolor: "white",
                     angularaxis: {
                         tickmode: 'array',
                         tickvals: thetaValues,
-                        ticktext: categories,
+                        ticktext: labels, // Use formatted HTML labels
                         rotation: 90,
                         direction: "clockwise",
                         visible: true,
-                        ticklen: 25,
+                        ticklen: 35,
                         ticks: '',
-                        tickfont: { size: 14, color: '#333', weight: 'bold' }
+                        tickfont: { size: 14, color: '#333' }
                     },
                     radialaxis: {
                         visible: false,
@@ -417,9 +494,19 @@
                     },
                     hole: 0
                 },
-                showlegend: false,
+                showlegend: true,
+                legend: {
+                    orientation: 'h',
+                    yanchor: 'bottom',
+                    y: 1.08, // Position above chart, below title
+                    xanchor: 'center',
+                    x: 0.5,
+                    font: { size: 14, color: '#555' },
+                    bgcolor: 'rgba(0,0,0,0)'
+                },
                 paper_bgcolor: "white",
-                margin: { l: 50, r: 50, t: 20, b: 100 }, // Reduced top margin
+                margin: { l: 80, r: 80, t: 150, b: 80 }, // Increased top margin for title/legend
+                dragmode: false,
                 images: [
                     {
                         source: imageUrl,
@@ -436,26 +523,41 @@
                 responsive: true,
                 displayModeBar: true,
                 displaylogo: false,
-                modeBarButtonsToRemove: ['select2d', 'lasso2d', 'zoomIn2d', 'zoomOut2d', 'autoScale2d', 'resetScale2d', 'hoverClosestCartesian', 'hoverCompareCartesian', 'toImage'],
+                staticPlot: false,
+                scrollZoom: false,
+                modeBarButtonsToRemove: ['zoom2d', 'pan2d', 'select2d', 'lasso2d', 'zoomIn2d', 'zoomOut2d', 'autoScale2d', 'resetScale2d', 'hoverClosestCartesian', 'hoverCompareCartesian', 'toImage', 'zoomIn', 'zoomOut'],
                 modeBarButtonsToAdd: [
                     {
                         name: 'Download PNG',
                         icon: Plotly.Icons.camera,
                         click: function (gd) {
-                            Plotly.downloadImage(gd, { format: 'png', height: 1000, width: 1000, filename: 'research_profile_png' });
+                            Plotly.downloadImage(gd, { format: 'png', scale: 3, filename: 'research_profile_png' });
                         }
                     },
                     {
                         name: 'Download SVG',
                         icon: Plotly.Icons.camera,
                         click: function (gd) {
-                            Plotly.downloadImage(gd, { format: 'svg', height: 1000, width: 1000, filename: 'research_profile_svg' });
+                            Plotly.downloadImage(gd, { format: 'svg', scale: 3, filename: 'research_profile_svg' });
                         }
                     }
                 ]
             };
 
-            Plotly.react('chart-container', [trace], layout, config);
+            Plotly.react('chart-container', traces, layout, config).then(function () {
+                // CSS Hack to force circular crop
+                const plot = document.getElementById('chart-container');
+                const mainSvg = plot.querySelector('.main-svg');
+                if (mainSvg) {
+                    const images = mainSvg.querySelectorAll('image');
+                    images.forEach(img => {
+                        if (img.getAttribute('href') === state.imageUrl) {
+                            img.setAttribute('clip-path', 'url(#circle-clip)');
+                            img.setAttribute('preserveAspectRatio', 'xMidYMid slice');
+                        }
+                    });
+                }
+            });
         }
 
         // Init
