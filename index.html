@@ -1,0 +1,468 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Research Interest Profile</title>
+    <!-- Load Plotly.js -->
+    <script src="https://cdn.plot.ly/plotly-2.27.0.min.js"></script>
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background-color: #ffffff;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            min-height: 100vh;
+            overflow-x: hidden;
+        }
+
+        h1 {
+            margin-top: 20px;
+            color: #333;
+            font-weight: 300;
+        }
+
+        #chart-container {
+            width: 95vw;
+            height: 85vh;
+            max-width: 1000px;
+            max-height: 1000px;
+            position: relative;
+        }
+
+        .footer {
+            margin-bottom: 20px;
+            color: #888;
+            font-size: 0.9em;
+        }
+
+        /* Legend Styles */
+        .legend-container {
+            display: flex;
+            gap: 15px;
+            margin-bottom: 10px;
+            flex-wrap: wrap;
+            justify-content: center;
+        }
+
+        .legend-item {
+            display: flex;
+            align-items: center;
+            font-size: 0.9em;
+            color: #555;
+        }
+
+        .legend-color {
+            width: 12px;
+            height: 12px;
+            border-radius: 2px;
+            margin-right: 6px;
+            display: inline-block;
+        }
+
+        /* Editor Styles */
+        #edit-toggle {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            background: #333;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 20px;
+            cursor: pointer;
+            z-index: 1001;
+            box-shadow: 0 2px 5px rgba(0, 0, 0, 0.2);
+            transition: background 0.3s;
+        }
+
+        #edit-toggle:hover {
+            background: #555;
+        }
+
+        #editor-panel {
+            position: fixed;
+            top: 0;
+            right: -400px;
+            /* Hidden by default */
+            width: 350px;
+            height: 100vh;
+            background: white;
+            box-shadow: -2px 0 10px rgba(0, 0, 0, 0.1);
+            z-index: 1000;
+            padding: 20px;
+            padding-top: 70px;
+            overflow-y: auto;
+            transition: right 0.3s ease-in-out;
+            box-sizing: border-box;
+        }
+
+        #editor-panel.open {
+            right: 0;
+        }
+
+        .control-group {
+            margin-bottom: 20px;
+            border-bottom: 1px solid #eee;
+            padding-bottom: 15px;
+        }
+
+        .control-group h3 {
+            margin: 0 0 10px 0;
+            font-size: 1.1em;
+            color: #444;
+        }
+
+        .input-row {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 8px;
+            align-items: center;
+        }
+
+        .input-row label {
+            flex: 1;
+            font-size: 0.9em;
+            color: #666;
+        }
+
+        .input-row input[type="text"] {
+            flex: 2;
+            padding: 5px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+        }
+
+        select {
+            flex: 2;
+            padding: 5px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            background: white;
+        }
+
+        .btn {
+            padding: 8px 12px;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 0.9em;
+        }
+
+        .btn-danger {
+            background: #ffcdd2;
+            color: #c62828;
+        }
+
+        .btn-add {
+            background: #f0f0f0;
+            color: #333;
+            width: 100%;
+            margin-top: 5px;
+        }
+    </style>
+</head>
+
+<body>
+
+    <button id="edit-toggle" onclick="toggleEditor()">⚙️ Edit Data</button>
+
+    <div id="editor-panel" class="open">
+        <div class="control-group">
+            <h3>Categories</h3>
+            <div id="categories-list"></div>
+            <button class="btn btn-add" onclick="addCategory()">+ Add Category</button>
+        </div>
+
+        <div class="control-group">
+            <h3>Levels</h3>
+            <div id="values-list"></div>
+        </div>
+
+        <div class="control-group">
+            <h3>Configuration</h3>
+            <div class="input-row">
+                <label>Profile Image URL:</label>
+                <input type="text" id="img-url-input" onchange="updateChart()"
+                    value="https://avatars.githubusercontent.com/u/9919?s=200&v=4">
+            </div>
+            <div class="input-row">
+                <label>Or Upload Image:</label>
+                <input type="file" id="img-upload-input" accept="image/*" onchange="handleImageUpload(this)">
+            </div>
+        </div>
+    </div>
+
+    <h1>My Research Focus</h1>
+
+    <!-- Custom HTML Legend -->
+    <div id="custom-legend" class="legend-container"></div>
+
+    <div id="chart-container"></div>
+    <div class="footer">Interactive Visualization with Plotly.js</div>
+
+    <script>
+        // --- Constants & Mappings ---
+        // Improved Color Scheme: Cool to Warm / Low Saturation to High Saturation
+        const LEVELS = {
+            "Don't Know": {
+                value: 25,
+                color: '#E0E0E0', // Light Gray
+                description: "No prior experience"
+            },
+            "Know Basis": {
+                value: 50,
+                color: '#81D4FA', // Light Blue (Cool)
+                description: "Understand basic concepts"
+            },
+            "Familiar with": {
+                value: 75,
+                color: '#7E57C2', // Deep Purple (Intermediate)
+                description: "Have worked with it"
+            },
+            "Research Focus": {
+                value: 100,
+                color: '#FF4081', // Pink/Red Accent (Highlight)
+                description: "Active research area"
+            }
+        };
+
+        const LEVEL_KEYS = Object.keys(LEVELS);
+
+        // --- Initial Data State ---
+        let state = {
+            categories: [
+                'Generative Modeling',
+                'LLM',
+                'Representation Learning',
+                'Multimodal AI',
+                'Reasoning',
+                'AI Agents',
+                'Efficient AI',
+                'AI Safety'
+            ],
+            values: [
+                "Research Focus",
+                "Research Focus",
+                "Familiar with",
+                "Know Basis",
+                "Don't Know",
+                "Familiar with",
+                "Know Basis",
+                "Research Focus"
+            ],
+            imageUrl: "https://avatars.githubusercontent.com/u/9919?s=200&v=4"
+        };
+
+        // --- UI Logic ---
+
+        function toggleEditor() {
+            document.getElementById('editor-panel').classList.toggle('open');
+        }
+
+        function renderLegend() {
+            const container = document.getElementById('custom-legend');
+            container.innerHTML = '';
+            LEVEL_KEYS.forEach(key => {
+                const item = document.createElement('div');
+                item.className = 'legend-item';
+                item.innerHTML = `
+                    <span class="legend-color" style="background-color: ${LEVELS[key].color}"></span>
+                    <span>${key}</span>
+                `;
+                container.appendChild(item);
+            });
+        }
+
+        function renderEditor() {
+            // 1. Categories
+            const catList = document.getElementById('categories-list');
+            catList.innerHTML = '';
+            state.categories.forEach((cat, index) => {
+                const row = document.createElement('div');
+                row.className = 'input-row';
+                row.innerHTML = `
+                    <input type="text" value="${cat}" onchange="updateCategoryName(${index}, this.value)">
+                    <button class="btn btn-danger" onclick="removeCategory(${index})">×</button>
+                `;
+                catList.appendChild(row);
+            });
+
+            // 2. Values (Dropdowns for Levels)
+            const valList = document.getElementById('values-list');
+            valList.innerHTML = '';
+
+            state.categories.forEach((cat, index) => {
+                const row = document.createElement('div');
+                row.className = 'input-row';
+
+                // Create Select Options
+                const options = LEVEL_KEYS.map(key =>
+                    `<option value="${key}" ${state.values[index] === key ? 'selected' : ''}>${key}</option>`
+                ).join('');
+
+                row.innerHTML = `
+                    <label>${cat}</label>
+                    <select onchange="updateValue(${index}, this.value)">
+                        ${options}
+                    </select>
+                `;
+                valList.appendChild(row);
+            });
+
+            // 3. Image
+            document.getElementById('img-url-input').value = state.imageUrl;
+        }
+
+        // --- Data Updates ---
+
+        function updateCategoryName(index, newName) {
+            state.categories[index] = newName;
+            renderEditor(); // Update labels in dropdown section
+            updateChart();
+        }
+
+        function removeCategory(index) {
+            if (state.categories.length <= 1) {
+                alert("Keep at least one category!");
+                return;
+            }
+            state.categories.splice(index, 1);
+            state.values.splice(index, 1);
+            renderEditor();
+            updateChart();
+        }
+
+        function addCategory() {
+            state.categories.push("New Interest");
+            state.values.push("Don't Know"); // Default
+            renderEditor();
+            updateChart();
+        }
+
+        function updateValue(index, newValue) {
+            state.values[index] = newValue;
+            updateChart();
+        }
+
+        document.getElementById('img-url-input').addEventListener('change', (e) => {
+            state.imageUrl = e.target.value;
+            updateChart();
+        });
+
+        function handleImageUpload(input) {
+            if (input.files && input.files[0]) {
+                const reader = new FileReader();
+                reader.onload = function (e) {
+                    state.imageUrl = e.target.result;
+                    document.getElementById('img-url-input').value = "(Uploaded Image)";
+                    updateChart();
+                };
+                reader.readAsDataURL(input.files[0]);
+            }
+        }
+
+        // --- Chart Logic ---
+
+        function updateChart() {
+            const { categories, values, imageUrl } = state;
+
+            const numericValues = values.map(v => LEVELS[v].value);
+            const barColors = values.map(v => LEVELS[v].color);
+
+            const numCategories = categories.length;
+            const sectorSize = 360 / numCategories;
+            const barWidth = 20;
+            const innerRadius = 20;
+            const thetaValues = categories.map((_, i) => i * sectorSize);
+
+            const trace = {
+                type: 'barpolar',
+                r: numericValues,
+                theta: thetaValues,
+                width: barWidth,
+                base: innerRadius,
+                marker: {
+                    color: barColors,
+                    opacity: 0.9, // Increased opacity for better visibility
+                    line: { color: 'white', width: 1 }
+                },
+                hoverinfo: 'text',
+                text: values.map((v, i) => `${categories[i]}<br>Level: ${v}`)
+            };
+
+            const layout = {
+                title: { text: '', font: { size: 24 } },
+                polar: {
+                    bgcolor: "white",
+                    angularaxis: {
+                        tickmode: 'array',
+                        tickvals: thetaValues,
+                        ticktext: categories,
+                        rotation: 90,
+                        direction: "clockwise",
+                        visible: true,
+                        ticklen: 25,
+                        ticks: '',
+                        tickfont: { size: 14, color: '#333', weight: 'bold' }
+                    },
+                    radialaxis: {
+                        visible: false,
+                        range: [0, 110]
+                    },
+                    hole: 0
+                },
+                showlegend: false,
+                paper_bgcolor: "white",
+                margin: { l: 50, r: 50, t: 20, b: 100 }, // Reduced top margin
+                images: [
+                    {
+                        source: imageUrl,
+                        xref: "paper", yref: "paper",
+                        x: 0.5, y: 0.5,
+                        sizex: 0.15, sizey: 0.15,
+                        xanchor: "center", yanchor: "middle",
+                        layer: "above"
+                    }
+                ]
+            };
+
+            const config = {
+                responsive: true,
+                displayModeBar: true,
+                displaylogo: false,
+                modeBarButtonsToRemove: ['select2d', 'lasso2d', 'zoomIn2d', 'zoomOut2d', 'autoScale2d', 'resetScale2d', 'hoverClosestCartesian', 'hoverCompareCartesian', 'toImage'],
+                modeBarButtonsToAdd: [
+                    {
+                        name: 'Download PNG',
+                        icon: Plotly.Icons.camera,
+                        click: function (gd) {
+                            Plotly.downloadImage(gd, { format: 'png', height: 1000, width: 1000, filename: 'research_profile_png' });
+                        }
+                    },
+                    {
+                        name: 'Download SVG',
+                        icon: Plotly.Icons.camera,
+                        click: function (gd) {
+                            Plotly.downloadImage(gd, { format: 'svg', height: 1000, width: 1000, filename: 'research_profile_svg' });
+                        }
+                    }
+                ]
+            };
+
+            Plotly.react('chart-container', [trace], layout, config);
+        }
+
+        // Init
+        renderLegend();
+        renderEditor();
+        updateChart();
+    </script>
+</body>
+
+</html>
